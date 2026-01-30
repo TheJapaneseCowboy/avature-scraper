@@ -15,28 +15,24 @@ from src.extract.job_extractor import run_extraction
 
 
 def main():
-    # Prefer all_links.txt (includes job URLs) if present; else avature_career_links.txt
-    links_candidates = [
-        PROJECT_ROOT / "data" / "all_links.txt",
-        PROJECT_ROOT / "src" / "data" / "all_links.txt",
-        PROJECT_ROOT / "src" / "crawler" / "data" / "all_links.txt",
-        PROJECT_ROOT / "data" / "avature_career_links.txt",
-        PROJECT_ROOT / "src" / "data" / "avature_career_links.txt",
-        PROJECT_ROOT / "src" / "crawler" / "data" / "avature_career_links.txt",
+    # Use initial_links.txt first, then merge with other link files that exist
+    data_dir = PROJECT_ROOT / "data"
+    links_files = [
+        data_dir / "initial_links.txt",
+        data_dir / "all_links.txt",
+        data_dir / "avature_career_links.txt",
     ]
-    links_file = None
-    for p in links_candidates:
-        if p.exists():
-            links_file = p
-            break
-    if not links_file:
-        links_file = PROJECT_ROOT / "data" / "avature_career_links.txt"
-        links_file.parent.mkdir(parents=True, exist_ok=True)
-        print(f"No links file found. Create {links_file} with one URL per line, or run the career crawler first.")
+    # Use all link files that exist (initial_links.txt first when present)
+    existing = [str(p) for p in links_files if p.exists()]
+    if not existing:
+        data_dir.mkdir(parents=True, exist_ok=True)
+        default = data_dir / "avature_career_links.txt"
+        print(f"No link files found. Create {data_dir / 'initial_links.txt'} or run the career crawler first.")
+        existing = [str(default)]
 
     output_file = PROJECT_ROOT / "data" / "jobs.json"
     run_extraction(
-        links_file=str(links_file),
+        links_files=existing,
         output_file=str(output_file),
         fetch_rss=True,
         fetch_job_pages=True,
