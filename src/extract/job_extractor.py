@@ -115,14 +115,18 @@ def extract_job_links_from_listing(soup: BeautifulSoup, base_url: str, netloc: s
             continue
         path = (p.path or "").lower()
         query = (p.query or "").lower()
+        # Skip Login / password / auth pages (not job content)
+        if "/login" in path or "login" in path.split("/")[-1:][0]:
+            continue
         # Skip same page, search form, or non-job links
         if full_url == base_url or full_url.rstrip("/") == base_url.rstrip("/"):
             continue
         if "searchjobs" in path and "/jobdetail" not in path and "jobid" not in query and path.rstrip("/").endswith("searchjobs"):
             continue
-        # Job detail links: JobDetail in path/query, or SearchJobs/123, or /careers/.../123
+        # Job detail links: JobDetail in path; avoid Login?jobId=... (apply/auth page, not job content)
         is_job_link = (
-            "jobdetail" in path or "jobid" in query
+            ("jobdetail" in path and "/login" not in path)
+            or ("jobid" in query and "/login" not in path)
             or ("searchjobs" in path and path.count("/") >= 3)  # e.g. /careers/SearchJobs/123
             or ("careers" in path and any(seg.isdigit() for seg in path.split("/")) and len(path.split("/")) >= 4)
         )
@@ -446,6 +450,19 @@ def run_extraction(
         app_url = job.get("application_url", "")
         if app_url and ("/blogs/" in app_url or "/blog/" in app_url):
             return
+        # Exclude Login / auth pages (Apply often points to Login?jobId=...)
+        if app_url and "/login" in app_url.lower():
+            return
+        if (job.get("source_page") or "").lower().find("/login") != -1:
+            return
+        # Exclude entries that are just password/login form text (no real job description)
+        desc = (job.get("job_description") or "").strip()
+        if desc:
+            lower = desc.lower()
+            if lower.startswith("your password must") or "forgot your password?" in lower and "login" in lower and len(desc) < 600:
+                return
+            if lower.startswith("already registered?") and "login" in lower and "password" in lower and len(desc) < 500:
+                return
         if not is_likely_job_posting(app_url, job.get("job_title", ""), job.get("source_url", "")):
             # Allow HTML-extracted jobs from career subdomains even if URL pattern is generic
             purl = urlparse(app_url)
@@ -553,6 +570,7 @@ def run_extraction(
         json.dump(all_jobs, f, indent=2, ensure_ascii=False)
 
     print(f"Wrote {len(all_jobs)} jobs to {output_path}")
+    print(f"Total number of unique scraped jobs: {len(all_jobs)}")
     return all_jobs
 
 
